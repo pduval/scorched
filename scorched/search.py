@@ -339,6 +339,8 @@ class LuceneQuery(object):
         for k, v in list(kwargs.items()):
             try:
                 field_name, rel = k.split("__")
+                if rel and len(rel) == 1:
+                    field_name, rel = k, 'eq'
             except ValueError:
                 field_name, rel = k, 'eq'
             if not field_name:

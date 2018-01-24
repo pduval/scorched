@@ -40,6 +40,7 @@ class LuceneQuery(object):
             self._and = True
             self._or = self._not = self._pow = False
             self.boosts = []
+            self.local_params = None
         else:
             self.option_flag = original.option_flag
             self.multiple_tags_allowed = original.multiple_tags_allowed
@@ -52,13 +53,17 @@ class LuceneQuery(object):
             self._not = original._not
             self._pow = original._pow
             self.boosts = copy.copy(original.boosts)
+            self.local_params = original.local_params
 
     def clone(self):
         return LuceneQuery(original=self)
 
     def options(self):
         opts = {}
-        s = self.__unicode_special__()
+        if self.option_flag == u"fq" and not self._or:
+           s = self.__unicode_special__(with_local_params=True)
+        else:
+           s = self.__unicode_special__()
         if s:
             opts[self.option_flag] = s
         return opts
@@ -154,7 +159,7 @@ class LuceneQuery(object):
             if not _s or changed:
                 mutated = True
             if _s:
-                if (_s._and and self._and) or (_s._or and self._or):
+                if ((_s._and and self._and) or (_s._or and self._or)) and not _s.local_params:
                     mutated = True
                     _terms = self.merge_term_dicts(_terms, _s.terms)
                     _phrases = self.merge_term_dicts(_phrases, _s.phrases)
@@ -206,7 +211,7 @@ class LuceneQuery(object):
     def __str__(self):
         return self.__unicode_special__(force_serialize=True)
 
-    def __unicode_special__(self, level=0, op=None, force_serialize=False):
+    def __unicode_special__(self, level=0, op=None, force_serialize=False, with_local_params=False):
         if not self.normalized:
             self, _ = self.normalize()
         if self.boosts:
@@ -218,7 +223,7 @@ class LuceneQuery(object):
             newself = newself | (newself & reduce(operator.or_, boost_queries))
             newself, _ = newself.normalize()
             return newself.__unicode_special__(level=level,
-                                               force_serialize=force_serialize)
+                                               force_serialize=force_serialize, with_local_params=with_local_params)
         else:
             alliter = [self.serialize_term_queries(self.terms),
                        self.serialize_term_queries(self.phrases),
@@ -228,7 +233,17 @@ class LuceneQuery(object):
                 u.extend(iterator)
             for q in self.subqueries:
                 op_ = u'OR' if self._or else u'AND'
-                if self.child_needs_parens(q):
+                if op_ == u'AND' and with_local_params and q.local_params:
+                   lp = q.local_params
+                   q.local_params = None
+                   try:
+                        if self.child_needs_parens(q):
+                            u.append(u"{0}({1})".format(lp,q.__unicode_special__(level=level+1, op=op_)))
+                        else:
+                            u.append(u"{0}{1}".format(lp,q.__unicode_special__(level=level+1, op=op_)))
+                   finally:
+                        q.local_params = lp
+                elif self.child_needs_parens(q):
                     u.append(
                         u"(%s)" % q.__unicode_special__(
                             level=level + 1, op=op_))

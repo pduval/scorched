@@ -305,9 +305,9 @@ class SolrInterface(object):
 
     def _extract_datefields(self, schema):
         ret = [x['name'] for x in
-               schema['fields'] if x['type'] == 'date']
+               schema['fields'] if x['type'] in ('date', 'tdate')]
         ret.extend([x['name'] for x in schema['dynamicFields']
-                    if x['type'] == 'date'])
+                    if x['type'] in ('date', 'tdate')])
         return ret
 
     def _should_skip_value(self, value):

@@ -335,12 +335,13 @@ class SolrInterface(object):
         #                       precisionStep="0" positionIncrementGap="0"/>
         # This schema parsing is determining the fields by name
         # and not by java class type. Therefore this is error-prone.
-        ret = [x["name"] for x in schema["fields"] if x["type"] in ["pdate", "date"]]
+        # We add tdate as well for compatibility
+        ret = [x["name"] for x in schema["fields"] if x["type"] in ["pdate", "date", "tdate"]]
         ret.extend(
             [
                 x["name"]
                 for x in schema["dynamicFields"]
-                if x["type"] in ["pdate", "date"]
+                if x["type"] in ["pdate", "date", "tdate"]
             ]
         )
         return ret

@@ -119,7 +119,8 @@ class LuceneQuery(object):
                 values = values[0]
                 if not is_iter(values):
                     values = [values]
-                values = sorted(values)
+                # WTF!!!    
+                # values = sorted(values)
                 values = [self.to_query(v) for v in values]
                 range_s = self.range_query_templates[rel] % tuple(
                     values)

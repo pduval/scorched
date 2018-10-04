@@ -111,6 +111,8 @@ class LuceneQuery(object):
         "gte": u"[%s TO *]",
         "rangeexc": u"{%s TO %s}",
         "range": u"[%s TO %s]",
+        "rangebexc": u"{%s TO %s]",
+        "rangeeexc": u"[%s TO %s}",
     }
 
     def serialize_range_queries(self):
@@ -377,7 +379,7 @@ class LuceneQuery(object):
         if rel not in self.range_query_templates:
             raise scorched.exc.SolrError("No such relation '%s' defined" % rel)
         insts = (value,)
-        if rel in ('range', 'rangeexc'):
+        if rel in ('range', 'rangeexc', 'rangebexc', 'rangeexc'):
             try:
                 assert len(value) == 2
             except (AssertionError, TypeError):

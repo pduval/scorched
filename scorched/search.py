@@ -843,6 +843,7 @@ class FacetRangeOptions(Options):
         "hardend": bool,
         "limit": int,
         "mincount": int,
+        "prefix": str,
         "include": ["lower", "upper", "edge", "outer", "all"],
         "other": ["before", "after", "between", "none", "all"],
     }
@@ -855,7 +856,8 @@ class FacetRangeOptions(Options):
 
     def field_names_in_opts(self, opts, fields):
         opts['facet'] = True
-        opts[self.option_name] = list(self.fields.keys())
+        opts[self.option_name] = ["{0}{1}".format(i.get("prefix", ""), k) for (k,i) in self.fields.items()]
+
 
     def options(self):
         '''
@@ -871,6 +873,12 @@ class FacetRangeOptions(Options):
                 if oldkey in opts:
                     opts[newkey] = opts[oldkey]
                     del opts[oldkey]
+            #Delete prefix from the set, as it's only used for the facet.range field name
+            for key in ("prefix",):
+                oldkey = 'f.%s.facet.range.%s' % (field, key)
+                if oldkey in opts:
+                    del opts[oldkey]
+
 
         return opts
 

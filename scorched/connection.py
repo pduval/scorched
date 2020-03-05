@@ -206,21 +206,34 @@ class SolrConnection(object):
         if not self.readable:
             raise TypeError("This Solr instance is only for writing")
         params.append(('wt', 'json'))
-        qs = scorched.compat.urlencode(params)
-        url = "%s?%s" % (self.select_url, qs)
-        if len(url) > self.max_length_get_url:
-            warnings.warn(
-                "Long query URL encountered - POSTing instead of "
-                "GETting. This query will not be cached at the HTTP layer")
-            url = self.select_url
+        if dict(params).get("json", None):
+            # we are using the json api.
+            qs = scorched.compat.urlencode([(k,v) for (k,v) in params if k != "json" ])
+            url = "%s?%s" % (self.select_url, qs)
             method = 'POST'
             kwargs = {
-                'data': qs,
+                'json': dict(params)["json"],
                 'headers': {
-                    "Content-Type": "application/x-www-form-urlencoded"}}
+                    "Content-Type": "application/json"
+                }
+            }
+
         else:
-            method = 'GET'
-            kwargs = {}
+            qs = scorched.compat.urlencode(params)
+            url = "%s?%s" % (self.select_url, qs)
+            if len(url) > self.max_length_get_url:
+                warnings.warn(
+                    "Long query URL encountered - POSTing instead of "
+                    "GETting. This query will not be cached at the HTTP layer")
+                url = self.select_url
+                method = 'POST'
+                kwargs = {
+                    'data': qs,
+                    'headers': {
+                        "Content-Type": "application/x-www-form-urlencoded"}}
+            else:
+                method = 'GET'
+                kwargs = {}
         if self.search_timeout != ():
             kwargs['timeout'] = self.search_timeout
         response = self.request(method, url, **kwargs)

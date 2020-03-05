@@ -26,31 +26,54 @@ class SolrFacetCounts(object):
         try:
             facet_counts = response['facet_counts']
         except KeyError:
-            return SolrFacetCounts()
+            facet_counts = {}
         facet_fields = {}
-        for facet_field, facet_values in list(facet_counts[
-                'facet_fields'].items()):
-            facets = []
-            # Change each facet list from [a, 1, b, 2, c, 3 ...] to
-            # [(a, 1), (b, 2), (c, 3) ...]
-            for n, value in enumerate(facet_values):
-                if n & 1 == 0:
-                    name = value
-                else:
-                    facets.append((name, value))
-            facet_fields[facet_field] = facets
-        facet_counts['facet_fields'] = facet_fields
-        for facet_field in list(facet_counts['facet_ranges'].keys()):
-            counts = []
-            count_list = facet_counts['facet_ranges'][facet_field]['counts']
-            # Change each facet list from [a, 1, b, 2, c, 3 ...] to
-            # [(a, 1), (b, 2), (c, 3) ...]
-            for n, value in enumerate(count_list):
-                if n & 1 == 0:
-                    name = value
-                else:
-                    counts.append((name, value))
-            facet_counts['facet_ranges'][facet_field]['counts'] = counts
+        if facet_counts:
+            for facet_field, facet_values in list(facet_counts[
+                    'facet_fields'].items()):
+                facets = []
+                # Change each facet list from [a, 1, b, 2, c, 3 ...] to
+                # [(a, 1), (b, 2), (c, 3) ...]
+                for n, value in enumerate(facet_values):
+                    if n & 1 == 0:
+                        name = value
+                    else:
+                        facets.append((name, value))
+                facet_fields[facet_field] = facets
+            facet_counts['facet_fields'] = facet_fields
+            for facet_field in list(facet_counts['facet_ranges'].keys()):
+                counts = []
+                count_list = facet_counts['facet_ranges'][facet_field]['counts']
+                # Change each facet list from [a, 1, b, 2, c, 3 ...] to
+                # [(a, 1), (b, 2), (c, 3) ...]
+                for n, value in enumerate(count_list):
+                    if n & 1 == 0:
+                        name = value
+                    else:
+                        counts.append((name, value))
+                facet_counts['facet_ranges'][facet_field]['counts'] = counts
+
+        try:
+            json_facets = response["facets"]
+        except:
+            json_facets = None
+        if json_facets:
+            for facet, facet_data in json_facets.items():
+                if facet == "count" or not facet_data or not isinstance(facet_data, dict):
+                    continue
+                if "buckets" in facet_data:
+                    counts = []
+                    for buck in facet_data["buckets"]:
+                        if buck.get("val"):
+                            counts.append((buck.get("val", ""), buck.get("count", 0)))
+                    if counts:
+                        if not facet_counts.get("facet_fields", {}):
+                            facet_counts["facet_fields"] = {}
+                        facet_counts["facet_fields"][facet] = counts
+            
+
+
+
         return SolrFacetCounts(**facet_counts)
 
 

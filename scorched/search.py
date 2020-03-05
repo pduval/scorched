@@ -6,6 +6,7 @@ import datetime
 import numbers
 import operator
 import re
+import json
 
 import scorched.strings
 import scorched.exc
@@ -43,6 +44,7 @@ class LuceneQuery(object):
             self._or = self._not = self._pow = False
             self.boosts = []
             self.local_params = None
+            self.join = None
         else:
             self.option_flag = original.option_flag
             self.multiple_tags_allowed = original.multiple_tags_allowed
@@ -56,6 +58,7 @@ class LuceneQuery(object):
             self._pow = original._pow
             self.boosts = copy.copy(original.boosts)
             self.local_params = original.local_params
+            self.join = copy.copy(original.join)
 
     def clone(self):
         return LuceneQuery(original=self)
@@ -164,7 +167,7 @@ class LuceneQuery(object):
             if not _s or changed:
                 mutated = True
             if _s:
-                if ((_s._and and self._and) or (_s._or and self._or)) and not _s.local_params:
+                if ((_s._and and self._and) or (_s._or and self._or)) and not _s.local_params and not _s.join:
                     mutated = True
                     _terms = self.merge_term_dicts(_terms, _s.terms)
                     _phrases = self.merge_term_dicts(_phrases, _s.phrases)
@@ -230,6 +233,20 @@ class LuceneQuery(object):
             return newself.__unicode_special__(level=level,
                                                force_serialize=force_serialize, with_local_params=with_local_params)
         else:
+            if self.join:
+                newself = self.clone()
+                newself.join = None
+                newself.multiple_tags_allowed = False
+                res = "{{!join from={0} to={1}}}{2}".format(
+                        self.join["from"] or "", 
+                        self.join["to"] or "", 
+                        newself.__unicode_special__(
+                            level=level, 
+                            force_serialize=force_serialize, 
+                            with_local_params=with_local_params
+                        )
+                )
+                return res
             alliter = [self.serialize_term_queries(self.terms),
                        self.serialize_term_queries(self.phrases),
                        self.serialize_range_queries()]
@@ -239,15 +256,25 @@ class LuceneQuery(object):
             for q in self.subqueries:
                 op_ = u'OR' if self._or else u'AND'
                 if op_ == u'AND' and with_local_params and q.local_params:
-                   lp = q.local_params
-                   q.local_params = None
-                   try:
+                    lp = q.local_params
+                    join = q.join
+                    if join:
+                       join_p = "{{!join from={0} to={1}}}".format(
+                           join["from"] or "", 
+                           join["to"] or ""
+                       )
+                    else:
+                        join_p = ""
+                    q.local_params = None
+                    q.join = None
+                    try:
                         if self.child_needs_parens(q):
-                            u.append(u"{0}({1})".format(lp,q.__unicode_special__(level=level+1, op=op_)))
+                            u.append(u"{2}{0}({1})".format(lp,q.__unicode_special__(level=level+1, op=op_),join_p))
                         else:
-                            u.append(u"{0}{1}".format(lp,q.__unicode_special__(level=level+1, op=op_)))
-                   finally:
+                            u.append(u"{2}{0}{1}".format(lp,q.__unicode_special__(level=level+1, op=op_), join_p))
+                    finally:
                         q.local_params = lp
+                        q.join = join
                 elif self.child_needs_parens(q):
                     u.append(
                         u"(%s)" % q.__unicode_special__(
@@ -398,6 +425,15 @@ class LuceneQuery(object):
     def add_boost(self, kwargs, boost_score):
         self.boosts.append((kwargs, boost_score))
 
+    def set_join(self, join_from, join_to):
+        if join_from and join_to:
+            self.join = {
+                "from": join_from,
+                "to": join_to
+            }
+        else:
+            self.join = None
+
 
 class BaseSearch(object):
 
@@ -407,7 +443,7 @@ class BaseSearch(object):
                       'faceter', 'grouper', 'sorter', 'facet_querier',
                       'debugger', 'spellchecker', 'requesthandler',
                       'field_limiter', 'parser', 'pivoter', 'facet_ranger',
-                      'term_vectors', 'stat')
+                      'term_vectors', 'stat', 'json')
 
     def _init_common_modules(self):
         self.query_obj = LuceneQuery(u'q')
@@ -427,6 +463,7 @@ class BaseSearch(object):
         self.facet_ranger = FacetRangeOptions()
         self.facet_querier = FacetQueryOptions()
         self.term_vectors = TermVectorOptions()
+        self.json = JsonOptions()
         self.stat = StatOptions()
 
     def clone(self):
@@ -569,11 +606,19 @@ class BaseSearch(object):
         for option_module in self.option_modules:
             if hasattr(self, option_module):
                 _attr = getattr(self, option_module)
-                options.update(_attr.options())
+                if hasattr(_attr, "json_options"):
+                    options = _attr.json_options(options)
+                else:
+                    options.update(_attr.options())
         return options
 
     def results_as(self, constructor):
         newself = self.clone()
+        return newself
+
+    def with_json(self, data):
+        newself = self.clone()
+        newself.json.update(data)
         return newself
 
     def stats(self, fields, **kwargs):
@@ -809,6 +854,41 @@ class Options(object):
                          (field_name, self.option_name, field_opt)] = v
         return opts
 
+class JsonOptions(Options):
+
+    def __init__(self, original=None):
+        self.data = {}
+        if original:
+            self.data = original.data.copy()
+
+    def update(self, data):
+        facets = None
+        if data and "facet" in data and self.data and "facet" in self.data:
+            facets = data.pop("facet", {})
+        self.data.update(data)
+        if facets:
+            self.data["facet"].update(facets)
+
+    def options(self):
+        if self.data:
+            return { "json": json.dumps(self.data, indent=4) }
+        else:
+            return { }
+
+    def json_options(self, options):
+        _json = options.get("json", {}) or {}
+        data = self.data.copy()
+        if self.data and self.data.get("facet", {}) and _json and _json.get("facet", {}):
+            _json["facet"].update(data["facet"])
+            data.pop("facet", None)
+        _json.update(data)
+        options["json"] = _json
+        return options
+            
+
+
+
+    
 
 class FacetOptions(Options):
     option_name = "facet"
@@ -834,6 +914,34 @@ class FacetOptions(Options):
     def field_names_in_opts(self, opts, fields):
         if fields:
             opts["facet.field"] = sorted(fields)
+
+    def json_options(self, options):
+        _json = options.get("json", {})
+        if not _json or not _json.get("facet", {}):
+            _json["facet"] = {}
+        for (key, fdata) in self.fields.items():
+            if key.startswith("{!ex=") and key.index("}") > 4:
+                exclusion = key[5:key.index("}")]
+                field_name = key[key.index("}")+1:]
+            else:
+                exclusion = None
+                field_name = key
+
+            res = { "type": "terms", "field": field_name }
+            if fdata.get("prefix", None):
+                res["prefix"] = fdata["prefix"]
+            if fdata.get("sort", None) in ("count", "index"):
+                res["sort"] = fdata["sort"] + " desc"
+            if fdata.get("limit", -1) >= 0:
+                res["limit"] = fdata["limit"]
+            if exclusion:
+                res["domain"] = {
+                    "excludeTags": exclusion
+                }
+            _json["facet"][field_name] = res
+        options["json"] = _json
+        return options
+        
 
 
 class FacetRangeOptions(Options):
@@ -884,6 +992,30 @@ class FacetRangeOptions(Options):
 
         return opts
 
+    def json_options(self, options):
+        _json = options.get("json", {})
+        if not _json or not _json.get("facet", {}):
+            _json["facet"] = {}
+        for (key, fdata) in self.fields.items():
+            res = { "type": "range", "field": key }
+            if fdata.get("start", None):
+                res["start"] = fdata["start"]
+            if fdata.get("end", None):
+                res["end"] = fdata["end"]
+            if fdata.get("gap", None):
+                res["gap"] = fdata["gap"]
+            if fdata.get("limit", -1) >= 0:
+                res["limit"] = fdata["limit"]
+            if fdata.get("other", None):
+                res["other"] = fdata["other"]
+            if fdata.get("prefix", None):
+                if fdata["prefix"].startswith("{!ex=") and fdata["prefix"].endswith("}"):
+                    res["domain"] = { "excludeTags": fdata["prefix"][5:-1] }
+                else:
+                    res["prefix"] = fdata["prefix"]
+            _json["facet"][key] = res
+        options["json"] = _json
+        return options
 
 class FacetPivotOptions(Options):
     option_name = "facet.pivot"
@@ -1372,6 +1504,21 @@ class FacetQueryOptions(Options):
         else:
             return {}
 
+    def json_options(self, options):
+        if not self.queries:
+            return options
+        
+        _json = options.get("json", {})
+        if not _json or not _json.get("facet", {}):
+            _json["facet"] = {}
+        for query in self.queries:
+            textual = str(query)
+            _json["facet"][textual] = {
+                "type": "query",
+                "q": textual
+            }
+        options["json"] = _json
+        return options
 
 class StatOptions(Options):
     option_name = "stats"
@@ -1413,6 +1560,9 @@ class StatOptions(Options):
 def params_from_dict(**kwargs):
     utf8_params = []
     for k, vs in list(kwargs.items()):
+        if k == "json":
+            utf8_params.append((k,vs))
+            continue
         if isinstance(k, bytes):
             k = k.decode('utf-8')
         # We allow for multivalued options with lists.

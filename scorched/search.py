@@ -1,5 +1,6 @@
 from __future__ import unicode_literals
 import collections
+import collections.abc
 import copy
 import datetime
 import numbers
@@ -21,7 +22,7 @@ PARSERS = ("edismax", "dismax")
 
 
 def is_iter(val):
-    return not isinstance(val, basestring) and isinstance(val, collections.Iterable)
+    return not isinstance(val, basestring) and isinstance(val, collections.abc.Iterable)
 
 
 class LuceneQuery(object):
@@ -936,6 +937,8 @@ class FacetOptions(Options):
                 res["domain"] = {
                     "excludeTags": exclusion
                 }
+            if not "limit" in res:
+                res["limit"] = 25
             _json["facet"][field_name] = res
         options["json"] = _json
         return options

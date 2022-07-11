@@ -1,5 +1,6 @@
 from __future__ import unicode_literals
 import collections
+import collections.abc
 import json
 import scorched.dates
 
@@ -70,7 +71,9 @@ class SolrFacetCounts(object):
                         if not facet_counts.get("facet_fields", {}):
                             facet_counts["facet_fields"] = {}
                         facet_counts["facet_fields"][facet] = counts
-            
+                elif "count" in facet_data:
+                    facet_counts["facet_fields"][facet] = facet_data["count"]
+
 
 
 
@@ -133,7 +136,7 @@ class SolrUpdateResponse(object):
         return self
 
 
-class SolrResponse(collections.Sequence):
+class SolrResponse(collections.abc.Sequence):
 
     @classmethod
     def from_json(cls, jsonmsg, unique_key, datefields=()):

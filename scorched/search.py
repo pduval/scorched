@@ -295,9 +295,9 @@ class LuceneQuery(object):
             elif self._not:
                 assert len(u) == 1
                 if level == 0 or (level == 1 and op == "AND"):
-                    return u'NOT %s' % u[0]
+                    return u'NOT (%s)' % u[0]
                 else:
-                    return u'(*:* AND NOT %s)' % u[0]
+                    return u'(*:* AND NOT (%s))' % u[0]
             elif self._pow is not False:
                 assert len(u) == 1
                 return u"%s^%s" % (u[0], self._pow)

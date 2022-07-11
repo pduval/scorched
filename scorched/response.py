@@ -70,7 +70,9 @@ class SolrFacetCounts(object):
                         if not facet_counts.get("facet_fields", {}):
                             facet_counts["facet_fields"] = {}
                         facet_counts["facet_fields"][facet] = counts
-            
+                elif "count" in facet_data:
+                    facet_counts["facet_fields"][facet] = facet_data["count"]
+
 
 
 

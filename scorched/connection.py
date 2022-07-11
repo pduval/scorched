@@ -411,12 +411,19 @@ class SolrInterface(object):
         # chunk docs.
         ret = []
         for doc_chunk in grouper(docs, chunk):
-            update_message = json.dumps(self._prepare_docs(doc_chunk))
-            ret.append(
-                scorched.response.SolrUpdateResponse.from_json(
-                    self.conn.update(update_message, **kwargs)
-                )
-            )
+            try:
+                pdocs = self._prepare_docs(doc_chunk)
+                update_message = json.dumps(pdocs)
+            except Exception as e:
+                # print("bad docs:", pdocs)
+                import datetime
+                for d in pdocs:
+                    for (k,v) in d.items():
+                        if (isinstance(v, datetime.date)):
+                            print(k,v)
+                raise
+            ret.append(scorched.response.SolrUpdateResponse.from_json(
+                self.conn.update(update_message, **kwargs)))
         return ret
 
     def delete_by_query(self, query, **kwargs):

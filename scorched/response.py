@@ -30,28 +30,28 @@ class SolrFacetCounts(object):
             facet_counts = {}
         facet_fields = {}
         if facet_counts:
-		    for facet_field, facet_values in list(facet_counts["facet_fields"].items()):
-		        facets = []
+            for facet_field, facet_values in list(facet_counts["facet_fields"].items()):
+                facets = []
+                # Change each facet list from [a, 1, b, 2, c, 3 ...] to
+                # [(a, 1), (b, 2), (c, 3) ...]
+                for n, value in enumerate(facet_values):
+                    if n & 1 == 0:
+                        name = value
+                    else:
+                        facets.append((name, value))
+                facet_fields[facet_field] = facets
+            facet_counts["facet_fields"] = facet_fields
+            for facet_field in list(facet_counts["facet_ranges"].keys()):
+                counts = []
+                count_list = facet_counts["facet_ranges"][facet_field]["counts"]
 		        # Change each facet list from [a, 1, b, 2, c, 3 ...] to
 		        # [(a, 1), (b, 2), (c, 3) ...]
-		        for n, value in enumerate(facet_values):
-		            if n & 1 == 0:
-		                name = value
-		            else:
-		                facets.append((name, value))
-		        facet_fields[facet_field] = facets
-		    facet_counts["facet_fields"] = facet_fields
-		    for facet_field in list(facet_counts["facet_ranges"].keys()):
-		        counts = []
-		        count_list = facet_counts["facet_ranges"][facet_field]["counts"]
-		        # Change each facet list from [a, 1, b, 2, c, 3 ...] to
-		        # [(a, 1), (b, 2), (c, 3) ...]
-		        for n, value in enumerate(count_list):
-		            if n & 1 == 0:
-		                name = value
-		            else:
-		                counts.append((name, value))
-		        facet_counts["facet_ranges"][facet_field]["counts"] = counts
+                for n, value in enumerate(count_list):
+                    if n & 1 == 0:
+                        name = value
+                    else:
+                        counts.append((name, value))
+                facet_counts["facet_ranges"][facet_field]["counts"] = counts
 
         try:
             json_facets = response["facets"]
